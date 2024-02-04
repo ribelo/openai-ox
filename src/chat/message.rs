@@ -1,4 +1,5 @@
-use ai_tools::tools::{ToolCall, ToolType, ToolsResults};
+#[cfg(feature = "tools")]
+use ai_tools_ox::tools::{ToolCall, ToolType, ToolsResults};
 use derivative::Derivative;
 use serde::{Deserialize, Deserializer, Serialize};
 
@@ -8,6 +9,7 @@ pub enum Role {
     System,
     User,
     Assistant,
+    #[cfg(feature = "tools")]
     Tool,
 }
 
@@ -15,6 +17,7 @@ pub enum Role {
 struct HelperMessage {
     content: Option<String>,
     name: Option<String>,
+    #[cfg(feature = "tools")]
     tool_calls: Option<Vec<ToolCall>>,
 }
 
@@ -108,6 +111,7 @@ pub struct AssistantMessage {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub name: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[cfg(feature = "tools")]
     pub tool_calls: Option<Vec<ToolCall>>,
 }
 
@@ -121,6 +125,7 @@ impl<'de> Deserialize<'de> for AssistantMessage {
             role: Role::Assistant,
             content: helper.content,
             name: helper.name,
+            #[cfg(feature = "tools")]
             tool_calls: helper.tool_calls,
         })
     }
@@ -132,11 +137,13 @@ impl AssistantMessage {
             role: Role::Assistant,
             content: Some(content.to_string()),
             name: None,
+            #[cfg(feature = "tools")]
             tool_calls: None,
         }
     }
 }
 
+#[cfg(feature = "tools")]
 #[derive(Debug, Serialize, Deserialize, Clone, Derivative)]
 pub struct ToolMessage {
     #[derivative(Default(value = "Role::Tool"))]
@@ -145,6 +152,7 @@ pub struct ToolMessage {
     pub tool_call_id: String,
 }
 
+#[cfg(feature = "tools")]
 impl From<ToolsResults> for Messages {
     fn from(results: ToolsResults) -> Self {
         let mut messages = Messages::default();
@@ -167,6 +175,7 @@ pub enum Message {
     System(SystemMessage),
     User(UserMessage),
     Assistant(AssistantMessage),
+    #[cfg(feature = "tools")]
     Tool(ToolMessage),
 }
 
@@ -185,6 +194,7 @@ impl Message {
             Message::System(msg) => Some(msg.content.clone()),
             Message::User(msg) => Some(msg.content.clone()),
             Message::Assistant(msg) => msg.content.as_ref().cloned(),
+            #[cfg(feature = "tools")]
             Message::Tool(msg) => Some(msg.content.clone()),
         }
     }

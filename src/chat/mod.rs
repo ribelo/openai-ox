@@ -2,7 +2,8 @@ pub mod message;
 
 use std::{borrow::Cow, ops::Deref, sync::Arc};
 
-use ai_tools::tools::{self, ToTool, Tool, Tools};
+#[cfg(feature = "tools")]
+use ai_tools_ox::tools::{self, ToTool, Tool, Tools};
 use derivative::Derivative;
 use reqwest_eventsource::{self, Event, RequestBuilderExt};
 use serde::{Deserialize, Deserializer, Serialize};
@@ -70,6 +71,7 @@ pub struct ChatCompletionRequest {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub top_p: Option<f32>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[cfg(feature = "tools")]
     pub tools: Option<Tools>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub user: Option<String>,
@@ -94,6 +96,7 @@ pub struct ChatCompletionRequestBuilder {
     stream: Option<bool>,
     temperature: Option<f32>,
     top_p: Option<f32>,
+    #[cfg(feature = "tools")]
     tools: Option<Tools>,
     user: Option<String>,
     openai: Option<OpenAi>,
@@ -180,6 +183,7 @@ impl ChatCompletionRequestBuilder {
         self.top_p = Some(top_p);
         self
     }
+    #[cfg(feature = "tools")]
     pub fn tools(mut self, tools: Tools) -> Self {
         self.tools = Some(tools);
         self
@@ -219,6 +223,7 @@ impl ChatCompletionRequestBuilder {
             stream: self.stream,
             temperature: self.temperature,
             top_p: self.top_p,
+            #[cfg(feature = "tools")]
             tools: self.tools,
             user: self.user,
             openai,
@@ -400,7 +405,8 @@ impl OpenAi {
 
 #[cfg(test)]
 mod test {
-    use ai_tools::tools::{ToTool, Tool, ToolBuilder, ToolBuilderError, ToolCallResult, Tools};
+    #[cfg(feature = "tools")]
+    use ai_tools_ox::tools::{ToTool, Tool, ToolBuilder, ToolBuilderError, ToolCallResult, Tools};
     use tokio_stream::StreamExt;
 
     use crate::{
