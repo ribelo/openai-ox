@@ -120,12 +120,13 @@ impl ChatCompletionRequestBuilder {
         self.messages = Some(messages.into());
         self
     }
-    pub fn add_message(&mut self, message: impl Into<Message>) {
+    pub fn add_message(mut self, message: impl Into<Message>) -> Self {
         if let Some(ref mut messages) = self.messages {
             messages.push_message(message);
         } else {
             self.messages = Some(Messages::from(message.into()));
         }
+        self
     }
     pub fn model(mut self, model: &str) -> Self {
         self.model = Some(model.to_string());
@@ -323,7 +324,6 @@ impl ChatCompletionRequest {
             .post(&url)
             .bearer_auth(&self.openai.api_key)
             .json(self);
-        println!("{}", serde_json::to_string_pretty(&self).unwrap());
         let res = req.send().await?;
         if res.status().is_success() {
             let data: ChatCompletionResponse = res.json().await?;
@@ -339,12 +339,14 @@ impl ChatCompletionRequest {
     }
     pub async fn stream(&self) -> impl Stream<Item = ChatCompletionChunkResponse> {
         let url = format!("{}/{}", BASE_URL, API_URL);
+        let mut body = serde_json::to_value(self).unwrap();
+        body["stream"] = serde_json::Value::Bool(true);
         let mut es = self
             .openai
             .client
-            .post(&url)
+            .post(url)
             .bearer_auth(&self.openai.api_key)
-            .json(self)
+            .json(&body)
             .eventsource()
             .unwrap();
         let (tx, rx) = tokio::sync::mpsc::unbounded_channel();
@@ -437,6 +439,7 @@ mod test {
         }
     }
 
+    #[cfg(feature = "tools")]
     #[tokio::test]
     async fn test_wikipedia_tool() {
         #[derive(Debug)]

@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 #[cfg(feature = "tools")]
 use ai_tools_ox::tools::{ToolCall, ToolType, ToolsResults};
 use derivative::Derivative;
@@ -99,6 +101,12 @@ impl<'de> Deserialize<'de> for UserMessage {
 impl From<UserMessage> for String {
     fn from(message: UserMessage) -> Self {
         message.content
+    }
+}
+
+impl From<&str> for UserMessage {
+    fn from(content: &str) -> Self {
+        UserMessage::new(content)
     }
 }
 

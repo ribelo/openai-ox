@@ -19,10 +19,10 @@ pub enum ResponseFormat {
 
 #[allow(dead_code)]
 #[derive(Debug, Serialize)]
-pub struct SpeechRequest<'a> {
-    model: &'a str,
-    input: &'a str,
-    voice: &'a str,
+pub struct SpeechRequest {
+    model: String,
+    input: String,
+    voice: String,
     response_format: ResponseFormat,
     #[serde(skip_serializing_if = "Option::is_none")]
     speed: Option<f32>,
@@ -31,10 +31,10 @@ pub struct SpeechRequest<'a> {
 }
 
 #[derive(Debug, Default)]
-pub struct SpeechRequestBuilder<'a> {
-    model: Option<&'a str>,
-    input: Option<&'a str>,
-    voice: Option<&'a str>,
+pub struct SpeechRequestBuilder {
+    model: Option<String>,
+    input: Option<String>,
+    voice: Option<String>,
     response_format: Option<ResponseFormat>,
     speed: Option<f32>,
     openai: Option<OpenAi>,
@@ -58,20 +58,20 @@ pub enum SpeechRequestBuilderError {
     VoiceNotSet,
 }
 
-impl<'a> SpeechRequestBuilder<'a> {
+impl SpeechRequestBuilder {
     pub fn new() -> Self {
         Self::default()
     }
-    pub fn model(mut self, model: &'a str) -> Self {
-        self.model = Some(model);
+    pub fn model(mut self, model: impl AsRef<str>) -> Self {
+        self.model = Some(model.as_ref().to_owned());
         self
     }
-    pub fn input(mut self, input: &'a str) -> Self {
-        self.input = Some(input);
+    pub fn input(mut self, input: impl AsRef<str>) -> Self {
+        self.input = Some(input.as_ref().to_owned());
         self
     }
-    pub fn voice(mut self, voice: &'a str) -> Self {
-        self.voice = Some(voice);
+    pub fn voice(mut self, voice: impl AsRef<str>) -> Self {
+        self.voice = Some(voice.as_ref().to_owned());
         self
     }
     pub fn response_format(mut self, response_format: ResponseFormat) -> Self {
@@ -86,8 +86,8 @@ impl<'a> SpeechRequestBuilder<'a> {
         self.openai = Some(client);
         self
     }
-    pub fn build(self) -> Result<SpeechRequest<'a>, SpeechRequestBuilderError> {
-        if self.input.unwrap().len() > MAX_INPUT_LENGTH {
+    pub fn build(self) -> Result<SpeechRequest, SpeechRequestBuilderError> {
+        if self.input.as_ref().unwrap().len() > MAX_INPUT_LENGTH {
             return Err(SpeechRequestBuilderError::TextTooLong);
         }
         if let Some(speed) = self.speed {
@@ -121,14 +121,14 @@ impl<'a> SpeechRequestBuilder<'a> {
     }
 }
 
-impl<'a> TryFrom<SpeechRequestBuilder<'a>> for SpeechRequest<'a> {
+impl TryFrom<SpeechRequestBuilder> for SpeechRequest {
     type Error = SpeechRequestBuilderError;
-    fn try_from(builder: SpeechRequestBuilder<'a>) -> Result<Self, Self::Error> {
+    fn try_from(builder: SpeechRequestBuilder) -> Result<Self, Self::Error> {
         builder.build()
     }
 }
 
-impl<'a> SpeechRequest<'a> {
+impl SpeechRequest {
     pub async fn send(&self) -> Result<Vec<u8>, ApiRequestError> {
         let url = format!("{}/{}", BASE_URL, API_URL);
         let request = self
@@ -152,7 +152,7 @@ impl<'a> SpeechRequest<'a> {
 }
 
 impl OpenAi {
-    pub fn speech(&self) -> SpeechRequestBuilder<'_> {
+    pub fn speech(&self) -> SpeechRequestBuilder {
         SpeechRequestBuilder {
             openai: Some(self.clone()),
             ..Default::default()
@@ -173,7 +173,7 @@ Najszlachetniejsze zwierzęta odmawiają rozmnażania się w niewoli. Wiele zwie
         let client = reqwest::Client::new();
         let openai = OpenAiBuilder::default()
             .api_key(api_key)
-            .client(client)
+            .client(&client)
             .build()
             .unwrap();
         let mp3 = openai
