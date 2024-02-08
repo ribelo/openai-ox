@@ -59,14 +59,14 @@ pub enum ResponseFormat {
 
 #[derive(Debug, Default)]
 pub struct TranscribeRequestBuilder {
-    audio: Option<Vec<u8>>,
-    model: Option<String>,
-    language: Option<String>,
-    prompt: Option<String>,
-    format: Option<AudioFormat>,
-    response_format: Option<ResponseFormat>,
-    temperature: Option<f64>,
-    openai: Option<OpenAi>,
+    pub audio: Option<Vec<u8>>,
+    pub model: Option<String>,
+    pub language: Option<String>,
+    pub prompt: Option<String>,
+    pub format: Option<AudioFormat>,
+    pub response_format: Option<ResponseFormat>,
+    pub temperature: Option<f64>,
+    pub openai: Option<OpenAi>,
 }
 
 #[derive(Debug, Error)]

@@ -12,8 +12,7 @@ use thiserror::Error;
 use tokio_stream::{wrappers::LinesStream, Stream, StreamExt};
 
 use crate::{
-    tokenizer::TokenCount, ApiRequest, ApiRequestError, ApiRequestWithClient, ErrorResponse,
-    OpenAi, BASE_URL,
+    audio::transcription::TranscribeRequestBuilder, tokenizer::TokenCount, ApiRequest, ApiRequestError, ApiRequestWithClient, ErrorResponse, OpenAi, BASE_URL
 };
 
 use self::message::{Message, Messages};
@@ -384,6 +383,12 @@ impl OpenAi {
         ChatCompletionRequestBuilder {
             openai: Some(self.clone()),
             ..Default::default()
+        }
+    }
+    pub fn transcribe(&self) -> TranscribeRequest {
+        TranscribeRequestBuilder {
+            openai: Some(self.clone()),
+            ....Default::default()
         }
     }
 }
