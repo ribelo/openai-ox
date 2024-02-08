@@ -1,6 +1,6 @@
 [package]
 name = "openai-ox"
-version = "0.1.0"
+version = "0.1.1"
 edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
@@ -30,4 +30,3 @@ tiktoken-rs = "0.5.8"
 tokio = { version = "1.35", features = ["full"] }
 tokio-stream = { version = "0.1.14", features = ["io-util"] }
 reqwest-eventsource = "0.5.0"
-async-convert = "1.0.0"
