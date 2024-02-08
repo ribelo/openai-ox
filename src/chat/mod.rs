@@ -12,7 +12,8 @@ use thiserror::Error;
 use tokio_stream::{wrappers::LinesStream, Stream, StreamExt};
 
 use crate::{
-    audio::transcription::TranscribeRequestBuilder, tokenizer::TokenCount, ApiRequest, ApiRequestError, ApiRequestWithClient, ErrorResponse, OpenAi, BASE_URL
+    audio::transcription::TranscribeRequestBuilder, tokenizer::TokenCount, ApiRequest,
+    ApiRequestError, ApiRequestWithClient, ErrorResponse, OpenAi, BASE_URL,
 };
 
 use self::message::{Message, Messages};
@@ -80,25 +81,25 @@ pub struct ChatCompletionRequest {
 
 #[derive(Debug, Default)]
 pub struct ChatCompletionRequestBuilder {
-    messages: Option<Messages>,
-    model: Option<String>,
-    frequency_penalty: Option<f32>,
-    logit_bias: Option<serde_json::Value>,
-    logprobs: Option<bool>,
-    top_logprobs: Option<u32>,
-    max_tokens: Option<u32>,
-    n: Option<u32>,
-    presence_penalty: Option<f32>,
-    response_format: Option<ResponseFormat>,
-    seed: Option<u32>,
-    stop: Option<Vec<String>>,
-    stream: Option<bool>,
-    temperature: Option<f32>,
-    top_p: Option<f32>,
+    pub(crate) messages: Option<Messages>,
+    pub(crate) model: Option<String>,
+    pub(crate) frequency_penalty: Option<f32>,
+    pub(crate) logit_bias: Option<serde_json::Value>,
+    pub(crate) logprobs: Option<bool>,
+    pub(crate) top_logprobs: Option<u32>,
+    pub(crate) max_tokens: Option<u32>,
+    pub(crate) n: Option<u32>,
+    pub(crate) presence_penalty: Option<f32>,
+    pub(crate) response_format: Option<ResponseFormat>,
+    pub(crate) seed: Option<u32>,
+    pub(crate) stop: Option<Vec<String>>,
+    pub(crate) stream: Option<bool>,
+    pub(crate) temperature: Option<f32>,
+    pub(crate) top_p: Option<f32>,
     #[cfg(feature = "tools")]
-    tools: Option<Tools>,
-    user: Option<String>,
-    openai: Option<OpenAi>,
+    pub(crate) tools: Option<Tools>,
+    pub(crate) user: Option<String>,
+    pub(crate) openai: Option<OpenAi>,
 }
 
 #[derive(Debug, Error)]
@@ -375,21 +376,6 @@ impl ChatCompletionRequest {
             }
         });
         tokio_stream::wrappers::UnboundedReceiverStream::new(rx)
-    }
-}
-
-impl OpenAi {
-    pub fn chat_completion(&self) -> ChatCompletionRequestBuilder {
-        ChatCompletionRequestBuilder {
-            openai: Some(self.clone()),
-            ..Default::default()
-        }
-    }
-    pub fn transcribe(&self) -> TranscribeRequest {
-        TranscribeRequestBuilder {
-            openai: Some(self.clone()),
-            ....Default::default()
-        }
     }
 }
 

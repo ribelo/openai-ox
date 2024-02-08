@@ -1,3 +1,5 @@
+use audio::transcription::{TranscribeRequest, TranscribeRequestBuilder};
+use chat::ChatCompletionRequestBuilder;
 use serde::Deserialize;
 use thiserror::Error;
 
@@ -52,6 +54,20 @@ pub enum OpenAiBuilderError {
 impl OpenAi {
     pub fn builder() -> OpenAiBuilder {
         OpenAiBuilder::default()
+    }
+
+    pub fn chat_completion(&self) -> ChatCompletionRequestBuilder {
+        ChatCompletionRequestBuilder {
+            openai: Some(self.clone()),
+            ..Default::default()
+        }
+    }
+
+    pub fn transcribe(&self) -> TranscribeRequestBuilder {
+        TranscribeRequestBuilder {
+            openai: Some(self.clone()),
+            ..Default::default()
+        }
     }
 }
 
