@@ -46,6 +46,20 @@ impl AudioFormat {
             AudioFormat::Webm => "webm",
         }
     }
+    pub fn from_extension(extension: &str) -> Option<Self> {
+        match extension {
+            "mp3" => Some(AudioFormat::Mp3),
+            "mp4" => Some(AudioFormat::Mp4),
+            "flac" => Some(AudioFormat::Flac),
+            "mpeg" => Some(AudioFormat::Mpeg),
+            "mpga" => Some(AudioFormat::Mpga),
+            "m4a" => Some(AudioFormat::M4a),
+            "ogg" => Some(AudioFormat::Ogg),
+            "wav" => Some(AudioFormat::Wav),
+            "webm" => Some(AudioFormat::Webm),
+            _ => None,
+        }
+    }
 }
 
 #[derive(Debug)]
@@ -82,6 +96,24 @@ pub enum TranscibeRequestBuilderError {
 }
 
 #[derive(Debug)]
+pub enum Audio {
+    Bytes(Vec<u8>),
+    File(String),
+}
+
+impl From<Vec<u8>> for Audio {
+    fn from(bytes: Vec<u8>) -> Self {
+        Audio::Bytes(bytes)
+    }
+}
+
+impl From<String> for Audio {
+    fn from(file: String) -> Self {
+        Audio::File(file)
+    }
+}
+
+#[derive(Debug)]
 pub struct TranscribeRequest {
     audio: Vec<u8>,
     model: String,
@@ -94,8 +126,16 @@ pub struct TranscribeRequest {
 }
 
 impl TranscribeRequestBuilder {
-    pub fn audio(mut self, audio: Vec<u8>) -> Self {
-        self.audio = Some(audio);
+    pub fn audio<T: Into<Audio>>(mut self, audio: T) -> Self {
+        match audio.into() {
+            Audio::Bytes(bytes) => self.audio = Some(bytes),
+            Audio::File(file) => {
+                let bytes = std::fs::read(&file).unwrap();
+                let format = AudioFormat::from_extension(file.split('.').last().unwrap()).unwrap();
+                self.format = Some(format);
+                self.audio = Some(bytes);
+            }
+        }
         self
     }
     pub fn format(mut self, format: AudioFormat) -> Self {
