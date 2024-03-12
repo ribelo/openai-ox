@@ -301,7 +301,7 @@ pub struct ChatCompletionChunkResponse {
     pub choices: Vec<ChoiceStreamed>,
     pub created: u64,
     pub model: String,
-    pub system_fingerprint: String,
+    pub system_fingerprint: Option<String>,
     pub object: String,
 }
 
