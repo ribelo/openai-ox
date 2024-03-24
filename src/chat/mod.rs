@@ -20,15 +20,15 @@ use self::message::{Message, Messages};
 
 const API_URL: &str = "v1/chat/completions";
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
 #[serde(rename = "text")]
 pub struct TextType;
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
 #[serde(rename = "json_object")]
 pub struct JsonType;
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum ResponseFormat {
     Text {
         #[serde(rename = "type")]
@@ -40,7 +40,7 @@ pub enum ResponseFormat {
     },
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Clone, Serialize)]
 pub struct ChatCompletionRequest {
     pub messages: Messages,
     pub model: String,
@@ -316,7 +316,7 @@ impl From<ChatCompletionChunkResponse> for String {
 }
 
 impl ChatCompletionRequest {
-    pub fn push_message(mut self, message: impl Into<Message>) {
+    pub fn push_message(&mut self, message: impl Into<Message>) {
         self.messages.push_message(message);
     }
     pub async fn send(&self) -> Result<ChatCompletionResponse, ApiRequestError> {
