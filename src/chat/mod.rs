@@ -316,6 +316,9 @@ impl From<ChatCompletionChunkResponse> for String {
 }
 
 impl ChatCompletionRequest {
+    pub fn push_message(mut self, message: impl Into<Message>) {
+        self.messages.push_message(message);
+    }
     pub async fn send(&self) -> Result<ChatCompletionResponse, ApiRequestError> {
         let url = format!("{}/{}", BASE_URL, API_URL);
         let req = self
