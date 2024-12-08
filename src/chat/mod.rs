@@ -1,20 +1,11 @@
 pub mod message;
 
-use std::{borrow::Cow, ops::Deref, sync::Arc};
-
-#[cfg(feature = "tools")]
-use ai_tools_ox::tools::{self, ToTool, Tool, Tools};
-use derivative::Derivative;
-use reqwest_eventsource::{self, Event, RequestBuilderExt};
-use serde::{Deserialize, Deserializer, Serialize};
+use bon::Builder;
+use futures::{Stream, StreamExt};
+use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use thiserror::Error;
-use tokio_stream::{wrappers::LinesStream, Stream, StreamExt};
 
-use crate::{
-    audio::transcription::TranscribeRequestBuilder, tokenizer::TokenCount, ApiRequest,
-    ApiRequestError, ApiRequestWithClient, ErrorResponse, OpenAi, BASE_URL,
-};
+use crate::{ApiRequestError, ErrorResponse, OpenAi, BASE_URL};
 
 use self::message::{Message, Messages};
 
@@ -40,12 +31,14 @@ pub enum ResponseFormat {
     },
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Builder)]
 pub struct ChatCompletionRequest {
+    #[builder(into)]
     pub messages: Messages,
+    #[builder(into)]
     pub model: String,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub frequency_penalty: Option<f32>,
+    pub frequency_penalty: Option<f64>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub logit_bias: Option<serde_json::Value>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -57,7 +50,7 @@ pub struct ChatCompletionRequest {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub n: Option<u32>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub presence_penalty: Option<f32>,
+    pub presence_penalty: Option<f64>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub response_format: Option<ResponseFormat>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -67,169 +60,15 @@ pub struct ChatCompletionRequest {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub stream: Option<bool>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub temperature: Option<f32>,
+    pub temperature: Option<f64>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub top_p: Option<f32>,
+    pub top_p: Option<f64>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    #[cfg(feature = "tools")]
-    pub tools: Option<Tools>,
+    pub tools: Option<Value>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub user: Option<String>,
     #[serde(skip)]
     pub openai: OpenAi,
-}
-
-#[derive(Debug, Default)]
-pub struct ChatCompletionRequestBuilder {
-    pub(crate) messages: Option<Messages>,
-    pub(crate) model: Option<String>,
-    pub(crate) frequency_penalty: Option<f32>,
-    pub(crate) logit_bias: Option<serde_json::Value>,
-    pub(crate) logprobs: Option<bool>,
-    pub(crate) top_logprobs: Option<u32>,
-    pub(crate) max_tokens: Option<u32>,
-    pub(crate) n: Option<u32>,
-    pub(crate) presence_penalty: Option<f32>,
-    pub(crate) response_format: Option<ResponseFormat>,
-    pub(crate) seed: Option<u32>,
-    pub(crate) stop: Option<Vec<String>>,
-    pub(crate) stream: Option<bool>,
-    pub(crate) temperature: Option<f32>,
-    pub(crate) top_p: Option<f32>,
-    #[cfg(feature = "tools")]
-    pub(crate) tools: Option<Tools>,
-    pub(crate) user: Option<String>,
-    pub(crate) openai: Option<OpenAi>,
-}
-
-#[derive(Debug, Error)]
-pub enum ChatCompletionRequestBuilderError {
-    #[error("Messages not set")]
-    MessagesNotSet,
-    #[error("Model not set")]
-    ModelNotSet,
-    #[error("Client not set")]
-    ClientNotSet,
-}
-
-impl ChatCompletionRequestBuilder {
-    pub fn new() -> Self {
-        Self::default()
-    }
-    pub fn messages(mut self, messages: impl Into<Messages>) -> Self {
-        self.messages = Some(messages.into());
-        self
-    }
-    pub fn add_message(mut self, message: impl Into<Message>) -> Self {
-        if let Some(ref mut messages) = self.messages {
-            messages.push_message(message);
-        } else {
-            self.messages = Some(Messages::from(message.into()));
-        }
-        self
-    }
-    pub fn model(mut self, model: &str) -> Self {
-        self.model = Some(model.to_string());
-        self
-    }
-    pub fn frequency_penalty(mut self, frequency_penalty: f32) -> Self {
-        self.frequency_penalty = Some(frequency_penalty);
-        self
-    }
-    pub fn logit_bias(mut self, logit_bias: serde_json::Value) -> Self {
-        self.logit_bias = Some(logit_bias);
-        self
-    }
-    pub fn logprobs(mut self, logprobs: bool) -> Self {
-        self.logprobs = Some(logprobs);
-        self
-    }
-    pub fn top_logprobs(mut self, top_logprobs: u32) -> Self {
-        self.top_logprobs = Some(top_logprobs);
-        self
-    }
-    pub fn max_tokens(mut self, max_tokens: u32) -> Self {
-        self.max_tokens = Some(max_tokens);
-        self
-    }
-    pub fn n(mut self, n: u32) -> Self {
-        self.n = Some(n);
-        self
-    }
-    pub fn presence_penalty(mut self, presence_penalty: f32) -> Self {
-        self.presence_penalty = Some(presence_penalty);
-        self
-    }
-    pub fn response_format(mut self, response_format: ResponseFormat) -> Self {
-        self.response_format = Some(response_format);
-        self
-    }
-    pub fn seed(mut self, seed: u32) -> Self {
-        self.seed = Some(seed);
-        self
-    }
-    pub fn stop(mut self, stop: Vec<String>) -> Self {
-        self.stop = Some(stop);
-        self
-    }
-    pub fn stream(mut self) -> Self {
-        self.stream = Some(true);
-        self
-    }
-    pub fn temperature(mut self, temperature: f32) -> Self {
-        self.temperature = Some(temperature);
-        self
-    }
-    pub fn top_p(mut self, top_p: f32) -> Self {
-        self.top_p = Some(top_p);
-        self
-    }
-    #[cfg(feature = "tools")]
-    pub fn tools(mut self, tools: Tools) -> Self {
-        self.tools = Some(tools);
-        self
-    }
-    pub fn user(mut self, user: String) -> Self {
-        self.user = Some(user);
-        self
-    }
-    pub fn client(mut self, client: OpenAi) -> Self {
-        self.openai = Some(client);
-        self
-    }
-    pub fn build(self) -> Result<ChatCompletionRequest, ChatCompletionRequestBuilderError> {
-        let Some(messages) = self.messages else {
-            return Err(ChatCompletionRequestBuilderError::MessagesNotSet);
-        };
-        let Some(model) = self.model else {
-            return Err(ChatCompletionRequestBuilderError::ModelNotSet);
-        };
-        let Some(openai) = self.openai else {
-            return Err(ChatCompletionRequestBuilderError::ClientNotSet);
-        };
-
-        Ok(ChatCompletionRequest {
-            messages,
-            model,
-            frequency_penalty: self.frequency_penalty,
-            logit_bias: self.logit_bias,
-            logprobs: self.logprobs,
-            top_logprobs: self.top_logprobs,
-            max_tokens: self.max_tokens,
-            n: self.n,
-            presence_penalty: self.presence_penalty,
-            response_format: self.response_format,
-            seed: self.seed,
-            stop: self.stop,
-            stream: self.stream,
-            temperature: self.temperature,
-            top_p: self.top_p,
-            #[cfg(feature = "tools")]
-            tools: self.tools,
-            user: self.user,
-            openai,
-        })
-    }
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -317,7 +156,7 @@ impl From<ChatCompletionChunkResponse> for String {
 
 impl ChatCompletionRequest {
     pub fn push_message(&mut self, message: impl Into<Message>) {
-        self.messages.push_message(message);
+        self.messages.push(message.into());
     }
     pub async fn send(&self) -> Result<ChatCompletionResponse, ApiRequestError> {
         let url = format!("{}/{}", BASE_URL, API_URL);
@@ -340,45 +179,65 @@ impl ChatCompletionRequest {
             })
         }
     }
-    pub async fn stream(&self) -> impl Stream<Item = ChatCompletionChunkResponse> {
+
+    pub async fn stream(
+        &self,
+    ) -> impl Stream<Item = Result<ChatCompletionChunkResponse, ApiRequestError>> {
         let url = format!("{}/{}", BASE_URL, API_URL);
         let mut body = serde_json::to_value(self).unwrap();
         body["stream"] = serde_json::Value::Bool(true);
-        let mut es = self
+
+        let stream = self
             .openai
             .client
             .post(url)
             .bearer_auth(&self.openai.api_key)
             .json(&body)
-            .eventsource()
-            .unwrap();
-        let (tx, rx) = tokio::sync::mpsc::unbounded_channel();
-        tokio::spawn(async move {
-            while let Some(event) = es.next().await {
-                match event {
-                    Ok(Event::Message(msg)) => match msg.data.as_str() {
-                        "[DONE]" => {
-                            es.close();
-                        }
-                        "" => {}
-                        data => {
-                            if let Ok(json) =
-                                serde_json::from_str::<ChatCompletionChunkResponse>(data)
-                            {
-                                tx.send(json).unwrap();
-                            } else {
-                                println!("err: {:#?}", msg);
-                            }
-                        }
-                    },
-                    Err(err) => {
-                        println!("err: {:#?}", err);
-                    }
-                    _ => {}
-                }
-            }
+            .send()
+            .await
+            .unwrap()
+            .bytes_stream();
+
+        let filtered_stream = stream.flat_map(|chunk| {
+            let chunk = match chunk {
+                Ok(bytes) => String::from_utf8(bytes.to_vec())
+                    .map_err(|e| ApiRequestError::Stream(e.to_string())),
+                Err(e) => Err(ApiRequestError::Stream(e.to_string())),
+            };
+
+            let responses = chunk
+                .map(|data| match data.as_str() {
+                    "" => vec![],
+                    s if s.starts_with("data: ") => s
+                        .split("\n\n")
+                        .filter(|chunk| !chunk.is_empty() && chunk != &"data: [DONE]")
+                        .filter_map(|chunk| chunk.strip_prefix("data: "))
+                        .map(|json_str| {
+                            serde_json::from_str::<ChatCompletionChunkResponse>(json_str)
+                                .map_err(ApiRequestError::SerdeError)
+                        })
+                        .filter(|res| {
+                            res.as_ref().is_ok_and(|res| {
+                                !res.choices.iter().any(|choice| {
+                                    choice.delta.content.as_ref().is_some_and(|s| {
+                                        dbg!(s);
+                                        dbg!(s.is_empty())
+                                    })
+                                })
+                            })
+                        })
+                        .collect(),
+                    _ => vec![Err(ApiRequestError::Stream(format!(
+                        "Invalid event data: {}",
+                        data
+                    )))],
+                })
+                .unwrap_or_else(|e| vec![Err(e)]);
+
+            futures::stream::iter(responses)
         });
-        tokio_stream::wrappers::UnboundedReceiverStream::new(rx)
+
+        Box::pin(filtered_stream)
     }
 }
 
@@ -399,121 +258,123 @@ impl ChatCompletionRequest {
 //     }
 // }
 
+impl OpenAi {
+    pub fn chat_completion(
+        &self,
+    ) -> ChatCompletionRequestBuilder<chat_completion_request_builder::SetOpenai> {
+        ChatCompletionRequest::builder().openai(self.clone())
+    }
+}
+
 #[cfg(test)]
 mod test {
-    #[cfg(feature = "tools")]
-    use ai_tools_ox::tools::{ToTool, Tool, ToolBuilder, ToolBuilderError, ToolCallResult, Tools};
-    use tokio_stream::StreamExt;
+
+    use futures::StreamExt;
 
     use crate::{
         chat::{message::Messages, Message},
-        OpenAiBuilder,
+        OpenAi,
     };
 
     #[tokio::test]
-    async fn test_chat_request_builder() {
+    async fn test_chat_stream() {
         let api_key = std::env::var("OPENAI_API_KEY").unwrap();
         let client = reqwest::Client::new();
-        let openai = OpenAiBuilder::default()
-            .api_key(api_key)
-            .client(&client)
-            .build()
-            .unwrap();
+        let openai = OpenAi::builder().api_key(api_key).client(client).build();
         let mut res = openai
             .chat_completion()
-            .model("gpt-4-1106-preview")
-            .stream()
+            .model("gpt-4o")
+            .stream(true)
             .messages(Message::user("Hi, I'm John."))
             .build()
-            .unwrap()
             .stream()
             .await;
         while let Some(res) = res.next().await {
-            println!("{}", String::from(res));
+            dbg!(String::from(res.unwrap()));
         }
     }
 
-    #[cfg(feature = "tools")]
-    #[tokio::test]
-    async fn test_wikipedia_tool() {
-        #[derive(Debug)]
-        pub struct Wikipedia;
+    // #[cfg(feature = "tools")]
+    // #[tokio::test]
+    // async fn test_wikipedia_tool() {
+    //     #[derive(Debug)]
+    //     pub struct Wikipedia;
 
-        #[async_trait::async_trait]
-        impl ToTool for Wikipedia {
-            fn to_tool(&self) -> Tool {
-                ToolBuilder::default()
-                    .name("wikipedia")
-                    .description("Search in wikipedia")
-                    .add_parameter::<String>("query", "Query")
-                    .build()
-                    .unwrap()
-            }
-            async fn call_tool(
-                &self,
-                tool_call_id: &str,
-                input: serde_json::Value,
-            ) -> ToolCallResult {
-                dbg!(&input);
-                let query = input["query"].as_str().unwrap();
-                let url = format!("https://en.wikipedia.org/w/api.php?action=query&format=json&list=search&srsearch={}", query);
-                let res = reqwest::get(&url)
-                    .await
-                    .unwrap()
-                    .json::<serde_json::Value>()
-                    .await
-                    .unwrap();
+    //     #[async_trait::async_trait]
+    //     impl ToTool for Wikipedia {
+    //         fn to_tool(&self) -> Tool {
+    //             ToolBuilder::default()
+    //                 .name("wikipedia")
+    //                 .description("Search in wikipedia")
+    //                 .add_parameter::<String>("query", "Query")
+    //                 .build()
+    //                 .unwrap()
+    //         }
+    //         async fn call_tool(
+    //             &self,
+    //             tool_call_id: &str,
+    //             input: serde_json::Value,
+    //         ) -> ToolCallResult {
+    //             dbg!(&input);
+    //             let query = input["query"].as_str().unwrap();
+    //             let url = format!("https://en.wikipedia.org/w/api.php?action=query&format=json&list=search&srsearch={}", query);
+    //             let res = reqwest::get(&url)
+    //                 .await
+    //                 .unwrap()
+    //                 .json::<serde_json::Value>()
+    //                 .await
+    //                 .unwrap();
 
-                ToolCallResult {
-                    tool_call_id: tool_call_id.to_string(),
-                    content: res.to_string(),
-                }
-            }
-        }
+    //             ToolCallResult {
+    //                 tool_call_id: tool_call_id.to_string(),
+    //                 content: res.to_string(),
+    //             }
+    //         }
+    //     }
 
-        let api_key = std::env::var("OPENAI_API_KEY").unwrap();
-        let client = reqwest::Client::new();
-        let openai = OpenAiBuilder::default()
-            .api_key(api_key)
-            .client(&client)
-            .build()
-            .unwrap();
-        let tools = Tools::default().add_tool(Wikipedia);
-        let mut messages = Messages::from(Message::user("Search Apollo project on Wikipedia."));
-        let res = openai
-            .chat_completion()
-            .model("gpt-4-1106-preview")
-            .tools(tools.clone())
-            .messages(messages.clone())
-            .build()
-            .unwrap()
-            .send()
-            .await
-            .unwrap();
+    //     let api_key = std::env::var("OPENAI_API_KEY").unwrap();
+    //     let client = reqwest::Client::new();
+    //     let openai = OpenAiBuilder::default()
+    //         .api_key(api_key)
+    //         .client(&client)
+    //         .build()
+    //         .unwrap();
+    //     let tools = Tools::default().add_tool(Wikipedia);
+    //     let mut messages = Messages::from(Message::user("Search Apollo project on Wikipedia."));
+    //     let res = openai
+    //         .chat_completion()
+    //         .model("gpt-4-1106-preview")
+    //         .tools(tools.clone())
+    //         .messages(messages.clone())
+    //         .build()
+    //         .unwrap()
+    //         .send()
+    //         .await
+    //         .unwrap();
 
-        match &res.choices[0].message {
-            Message::Assistant(msg) => {
-                if let Some(tool_calls) = &msg.tool_calls {
-                    let results = tools.call_tools(tool_calls).await;
-                    let tool_msgs = Messages::from(results.clone());
-                    messages.push_message(msg.clone());
-                    messages.extend(tool_msgs.into_iter());
-                    dbg!(&messages);
-                    let res = openai
-                        .chat_completion()
-                        .model("gpt-4-1106-preview")
-                        .tools(tools.clone())
-                        .messages(messages.clone())
-                        .build()
-                        .unwrap()
-                        .send()
-                        .await
-                        .unwrap();
+    //     match &res.choices[0].message {
+    //         Message::Assistant(msg) => {
+    //             if let Some(tool_calls) = &msg.tool_calls {
+    //                 let results = tools.call_tools(tool_calls).await;
+    //                 let tool_msgs = Messages::from(results.clone());
+    //                 messages.push_message(msg.clone());
+    //                 messages.extend(tool_msgs.into_iter());
+    //                 dbg!(&messages);
+    //                 let res = openai
+    //                     .chat_completion()
+    //                     .model("gpt-4-1106-preview")
+    //                     .tools(tools.clone())
+    //                     .messages(messages.clone())
+    //                     .build()
+    //                     .unwrap()
+    //                     .send()
+    //                     .await
+    //                     .unwrap();
 
-                    dbg!(&res);
-                }
-            }
-            _ => panic!("Not a tool call"),
-        }
-    }
+    //                 dbg!(&res);
+    //             }
+    //         }
+    //         _ => panic!("Not a tool call"),
+    //     }
+    // }
 }

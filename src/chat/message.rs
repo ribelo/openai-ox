@@ -1,9 +1,8 @@
-use std::sync::Arc;
+use std::{ops::{Deref, DerefMut}, sync::Arc};
 
-#[cfg(feature = "tools")]
-use ai_tools_ox::tools::{ToolCall, ToolType, ToolsResults};
-use derivative::Derivative;
+use bon::{builder, Builder};
 use serde::{Deserialize, Deserializer, Serialize};
+use serde_json::Value;
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 #[serde(rename_all = "lowercase")]
@@ -11,169 +10,61 @@ pub enum Role {
     System,
     User,
     Assistant,
-    #[cfg(feature = "tools")]
     Tool,
 }
 
-#[derive(Deserialize)]
-struct HelperMessage {
-    content: Option<String>,
-    name: Option<String>,
-    #[cfg(feature = "tools")]
-    tool_calls: Option<Vec<ToolCall>>,
-}
-
-#[derive(Debug, Serialize, Derivative, Clone)]
-#[derivative(Default)]
+#[derive(Debug, Clone, Serialize, Deserialize, Builder)]
 #[serde(rename_all = "lowercase")]
 pub struct SystemMessage {
-    #[derivative(Default(value = "Role::System"))]
+    #[builder(skip = Role::System)]
     pub role: Role,
+    #[builder(into)]
     pub content: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub name: Option<String>,
 }
 
-impl SystemMessage {
-    pub fn new(content: impl ToString) -> Self {
-        Self {
-            role: Role::System,
-            content: content.to_string(),
-            name: None,
-        }
+impl From<String> for SystemMessage {
+    fn from(content: String) -> Self {
+        SystemMessage::builder().content(content).build()
     }
 }
 
-impl<'de> Deserialize<'de> for SystemMessage {
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-    where
-        D: Deserializer<'de>,
-    {
-        let helper = HelperMessage::deserialize(deserializer)?;
-        Ok(SystemMessage {
-            role: Role::System,
-            content: helper.content.unwrap(),
-            name: helper.name,
-        })
-    }
-}
-
-impl From<SystemMessage> for String {
-    fn from(message: SystemMessage) -> Self {
-        message.content
-    }
-}
-
-#[derive(Debug, Serialize, Derivative, Clone)]
-#[derivative(Default)]
+#[derive(Debug, Clone, Serialize, Deserialize, Builder)]
 pub struct UserMessage {
-    #[derivative(Default(value = "Role::User"))]
+    #[builder(skip = Role::User)]
     pub role: Role,
+    #[builder(into)]
     pub content: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub name: Option<String>,
 }
 
-impl UserMessage {
-    pub fn new(content: impl ToString) -> Self {
-        Self {
-            role: Role::User,
-            content: content.to_string(),
-            name: None,
-        }
+impl From<String> for UserMessage {
+    fn from(content: String) -> Self {
+        UserMessage::builder().content(content).build()
     }
 }
 
-impl<'de> Deserialize<'de> for UserMessage {
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-    where
-        D: Deserializer<'de>,
-    {
-        let helper = HelperMessage::deserialize(deserializer)?;
-        Ok(UserMessage {
-            role: Role::User,
-            content: helper.content.unwrap(),
-            name: helper.name,
-        })
-    }
-}
-
-impl From<UserMessage> for String {
-    fn from(message: UserMessage) -> Self {
-        message.content
-    }
-}
-
-impl From<&str> for UserMessage {
-    fn from(content: &str) -> Self {
-        UserMessage::new(content)
-    }
-}
-
-#[derive(Debug, Serialize, Derivative, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize, Builder)]
 pub struct AssistantMessage {
-    #[derivative(Default(value = "Role::Assistant"))]
+    #[builder(skip = Role::Assistant)]
     pub role: Role,
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[builder(into)]
     pub content: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub name: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    #[cfg(feature = "tools")]
-    pub tool_calls: Option<Vec<ToolCall>>,
+    pub tool_calls: Option<Vec<Value>>,
 }
 
-impl<'de> Deserialize<'de> for AssistantMessage {
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-    where
-        D: Deserializer<'de>,
-    {
-        let helper = HelperMessage::deserialize(deserializer)?;
-        Ok(AssistantMessage {
-            role: Role::Assistant,
-            content: helper.content,
-            name: helper.name,
-            #[cfg(feature = "tools")]
-            tool_calls: helper.tool_calls,
-        })
-    }
-}
-
-impl AssistantMessage {
-    pub fn new(content: impl ToString) -> Self {
-        Self {
-            role: Role::Assistant,
-            content: Some(content.to_string()),
-            name: None,
-            #[cfg(feature = "tools")]
-            tool_calls: None,
-        }
-    }
-}
-
-#[cfg(feature = "tools")]
-#[derive(Debug, Serialize, Deserialize, Clone, Derivative)]
-pub struct ToolMessage {
-    #[derivative(Default(value = "Role::Tool"))]
+#[derive(Debug, Clone, Serialize, Deserialize, Builder)]
+pub struct ToolMessage{
     pub role: Role,
+    #[builder(into)]
     pub content: String,
     pub tool_call_id: String,
-}
-
-#[cfg(feature = "tools")]
-impl From<ToolsResults> for Messages {
-    fn from(results: ToolsResults) -> Self {
-        let mut messages = Messages::default();
-        for result in results.0 {
-            let msg = Message::Tool(ToolMessage {
-                role: Role::Tool,
-                content: result.content,
-                tool_call_id: result.tool_call_id,
-            });
-            messages.push_message(msg);
-        }
-        messages
-    }
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -183,27 +74,25 @@ pub enum Message {
     System(SystemMessage),
     User(UserMessage),
     Assistant(AssistantMessage),
-    #[cfg(feature = "tools")]
     Tool(ToolMessage),
 }
 
 impl Message {
-    pub fn system(content: impl ToString) -> Self {
-        Message::System(SystemMessage::new(content))
+    pub fn system(content: impl Into<String>) -> Self {
+        Message::System(SystemMessage::from(content.into()))
     }
-    pub fn user(content: impl ToString) -> Self {
-        Message::User(UserMessage::new(content))
+    pub fn user(content: impl Into<String>) -> Self {
+        Message::User(UserMessage::from(content.into()))
     }
-    pub fn assistant(content: impl ToString) -> Self {
-        Message::Assistant(AssistantMessage::new(content))
+    pub fn assistant(content: impl Into<String>) -> Self {
+        Message::Assistant(AssistantMessage::builder().content(content.into()).build())
     }
-    pub fn content(&self) -> Option<String> {
+    pub fn content(&self) -> Option<&str> {
         match self {
-            Message::System(msg) => Some(msg.content.clone()),
-            Message::User(msg) => Some(msg.content.clone()),
-            Message::Assistant(msg) => msg.content.as_ref().cloned(),
-            #[cfg(feature = "tools")]
-            Message::Tool(msg) => Some(msg.content.clone()),
+            Message::System(msg) => Some(&msg.content),
+            Message::User(msg) => Some(&msg.content),
+            Message::Assistant(msg) => msg.content.as_deref(),
+            Message::Tool(msg) => Some(&msg.content),
         }
     }
 }
@@ -229,27 +118,23 @@ impl From<AssistantMessage> for Message {
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct Messages(pub Vec<Message>);
 
-impl Messages {
-    pub fn push_message(&mut self, message: impl Into<Message>) {
-        self.0.push(message.into());
+impl Deref for Messages {
+    type Target = Vec<Message>;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl DerefMut for Messages {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.0
     }
 }
 
 impl From<Message> for Messages {
     fn from(value: Message) -> Self {
         Messages(vec![value])
-    }
-}
-
-impl<T> Extend<T> for Messages
-where
-    T: Into<Message>,
-{
-    fn extend<I>(&mut self, iter: I)
-    where
-        I: IntoIterator<Item = T>,
-    {
-        self.0.extend(iter.into_iter().map(|item| item.into()));
     }
 }
 

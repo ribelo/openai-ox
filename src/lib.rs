@@ -1,5 +1,4 @@
-use audio::transcription::{TranscribeRequest, TranscribeRequestBuilder};
-use chat::ChatCompletionRequestBuilder;
+use bon::Builder;
 use serde::Deserialize;
 use thiserror::Error;
 
@@ -7,133 +6,29 @@ pub mod audio;
 pub mod chat;
 pub mod embeddings;
 pub mod models;
-pub mod tokenizer;
 const BASE_URL: &str = "https://api.openai.com";
 
-cfg_if::cfg_if! {
-    if #[cfg(feature = "leaky-bucket")] {
-        use derivative::Derivative;
-        use std::sync::Arc;
-        pub use leaky_bucket::RateLimiter;
-    }
-}
+#[cfg(feature = "leaky-bucket")]
+pub use leaky_bucket::RateLimiter;
+use std::fmt;
+#[cfg(feature = "leaky-bucket")]
+use std::sync::Arc;
 
-#[derive(Default)]
-pub struct OpenAiBuilder {
-    api_key: Option<String>,
-    client: Option<reqwest::Client>,
+#[derive(Clone, Builder)]
+pub struct OpenAi {
+    api_key: String,
+    #[builder(default)]
+    client: reqwest::Client,
     #[cfg(feature = "leaky-bucket")]
-    leaky_bucket: Option<RateLimiter>,
+    leaky_bucket: Option<Arc<RateLimiter>>,
 }
 
-cfg_if::cfg_if! {
-    if #[cfg(feature = "leaky-bucket")] {
-        #[derive(Clone, Derivative)]
-        #[derivative(Debug)]
-        pub struct OpenAi {
-            api_key: String,
-            client: reqwest::Client,
-            #[derivative(Debug = "ignore")]
-            leaky_bucket: Option<Arc<RateLimiter>>,
-        }
-    } else {
-        #[derive(Clone, Debug)]
-        pub struct OpenAi {
-            api_key: String,
-            client: reqwest::Client,
-        }
-    }
-}
-
-#[derive(Debug, Error)]
-pub enum OpenAiBuilderError {
-    #[error("API key not set")]
-    ApiKeyNotSet,
-}
-
-impl OpenAi {
-    pub fn builder() -> OpenAiBuilder {
-        OpenAiBuilder::default()
-    }
-
-    pub fn chat_completion(&self) -> ChatCompletionRequestBuilder {
-        ChatCompletionRequestBuilder {
-            openai: Some(self.clone()),
-            ..Default::default()
-        }
-    }
-
-    pub fn transcribe(&self) -> TranscribeRequestBuilder {
-        TranscribeRequestBuilder {
-            openai: Some(self.clone()),
-            ..Default::default()
-        }
-    }
-}
-
-impl OpenAiBuilder {
-    pub fn new() -> Self {
-        Default::default()
-    }
-    /// Sets the API key for the OpenAI builder.
-    ///
-    /// # Parameters
-    /// * `api_key`: OpenAi API key as `String`
-    ///
-    /// # Returns
-    /// * An instance of `OpenAiBuilder` with the API key set
-    pub fn api_key(mut self, api_key: String) -> OpenAiBuilder {
-        self.api_key = Some(api_key);
-        self
-    }
-
-    /// Sets the client for the OpenAI builder.
-    ///
-    /// # Parameters
-    /// * `client`: A `reqwest::Client` instance
-    ///
-    /// # Returns
-    /// * An instance of `OpenAiBuilder` with the client set
-    pub fn client(mut self, client: &reqwest::Client) -> OpenAiBuilder {
-        self.client = Some(client.clone());
-        self
-    }
-
-    #[cfg(feature = "leaky-bucket")]
-    /// Sets the RateLimiter for the OpenAI builder. This feature is only available if the "leaky-bucket" feature is enabled.
-    ///
-    /// # Parameters
-    /// * `leaky_bucket`: An `Arc<RateLimiter>` instance
-    ///
-    /// # Returns
-    /// * An instance of `OpenAiBuilder` with the RateLimiter set
-    pub fn limiter(mut self, leaky_bucket: RateLimiter) -> OpenAiBuilder {
-        self.leaky_bucket = Some(leaky_bucket);
-        self
-    }
-
-    /// Builds the `OpenAi` instance using the set configuration.
-    ///
-    /// # Returns
-    /// * An `OpenAi` instance
-    ///
-    /// # Panics
-    /// * When neither API key nor client is provided.
-    pub fn build(self) -> Result<OpenAi, OpenAiBuilderError> {
-        let Some(api_key) = self.api_key else {
-            return Err(OpenAiBuilderError::ApiKeyNotSet);
-        };
-        let client = self.client.unwrap_or_default();
-
-        #[cfg(feature = "leaky-bucket")]
-        let leaky_bucket = self.leaky_bucket.map(Arc::new);
-
-        Ok(OpenAi {
-            api_key,
-            client,
-            #[cfg(feature = "leaky-bucket")]
-            leaky_bucket,
-        })
+impl fmt::Debug for OpenAi {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("OpenAi")
+            .field("api_key", &"[REDACTED]")
+            .field("client", &self.client)
+            .finish()
     }
 }
 
@@ -157,8 +52,6 @@ pub enum ApiRequestError {
     ReqwestError(#[from] reqwest::Error),
     #[error(transparent)]
     SerdeError(#[from] serde_json::Error),
-    #[error(transparent)]
-    EventSourceError(#[from] reqwest_eventsource::Error),
 
     #[error("Invalid request error: {message}")]
     InvalidRequestError {
@@ -168,6 +61,8 @@ pub enum ApiRequestError {
     },
     #[error("Unexpected response from API: {response}")]
     UnexpectedResponse { response: String },
+    #[error("Stream error: {0}")]
+    Stream(String),
 }
 
 /// `ApiRequest` trait allows sending any prepared request by explicitly providing OpenAI client.
