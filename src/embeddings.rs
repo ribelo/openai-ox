@@ -29,7 +29,7 @@ pub struct EmbeddingResponse {
 #[derive(Debug, Deserialize)]
 pub struct EmbeddingData {
     pub object: String,
-    pub embedding: Vec<f64>,
+    pub embedding: Vec<f32>,
     pub index: usize,
 }
 
