@@ -174,7 +174,7 @@ impl ChatCompletionRequest {
     pub fn push_message(&mut self, message: impl Into<Message>) {
         self.messages.push(message.into());
     }
-    pub async fn send(&self) -> Result<Value, ApiRequestError> {
+    pub async fn send(&self) -> Result<ChatCompletionResponse, ApiRequestError> {
         let url = format!("{}/{}", BASE_URL, API_URL);
         let req = self
             .openai
@@ -184,7 +184,7 @@ impl ChatCompletionRequest {
             .json(self);
         let res = req.send().await?;
         if res.status().is_success() {
-            let data: Value = res.json().await?;
+            let data: ChatCompletionResponse = res.json().await?;
             Ok(data)
         } else {
             let error_response: ErrorResponse = res.json().await?;
