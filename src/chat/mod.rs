@@ -103,9 +103,25 @@ pub struct ChoiceStreamed {
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Usage {
-    prompt_tokens: u32,
-    completion_tokens: u32,
-    total_tokens: u32,
+    pub prompt_tokens: u32,
+    pub completion_tokens: u32,
+    pub completion_tokens_details: CompletionTokensDetails,
+    pub prompt_tokens_details: PromptTokensDetails,
+    pub total_tokens: u32,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct CompletionTokensDetails {
+    pub accepted_prediction_tokens: u32,
+    pub audio_tokens: u32,
+    pub reasoning_tokens: u32,
+    pub rejected_prediction_tokens: u32,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct PromptTokensDetails {
+    pub audio_tokens: u32,
+    pub cached_tokens: u32,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -158,7 +174,7 @@ impl ChatCompletionRequest {
     pub fn push_message(&mut self, message: impl Into<Message>) {
         self.messages.push(message.into());
     }
-    pub async fn send(&self) -> Result<ChatCompletionResponse, ApiRequestError> {
+    pub async fn send(&self) -> Result<Value, ApiRequestError> {
         let url = format!("{}/{}", BASE_URL, API_URL);
         let req = self
             .openai
@@ -168,7 +184,7 @@ impl ChatCompletionRequest {
             .json(self);
         let res = req.send().await?;
         if res.status().is_success() {
-            let data: ChatCompletionResponse = res.json().await?;
+            let data: Value = res.json().await?;
             Ok(data)
         } else {
             let error_response: ErrorResponse = res.json().await?;
@@ -275,6 +291,21 @@ mod test {
         chat::{message::Messages, Message},
         OpenAi,
     };
+
+    #[tokio::test]
+    async fn test_chat_no_stream() {
+        let api_key = std::env::var("OPENAI_API_KEY").unwrap();
+        let client = reqwest::Client::new();
+        let openai = OpenAi::builder().api_key(api_key).client(client).build();
+        let res = openai
+            .chat_completion()
+            .model("gpt-4o")
+            .messages(Message::user("Hi, I'm John."))
+            .build()
+            .send()
+            .await;
+        dbg!(&res);
+    }
 
     #[tokio::test]
     async fn test_chat_stream() {
