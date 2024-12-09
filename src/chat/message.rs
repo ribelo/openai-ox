@@ -1,4 +1,7 @@
-use std::{ops::{Deref, DerefMut}, sync::Arc};
+use std::{
+    ops::{Deref, DerefMut},
+    sync::Arc,
+};
 
 use bon::{builder, Builder};
 use serde::{Deserialize, Deserializer, Serialize};
@@ -16,8 +19,6 @@ pub enum Role {
 #[derive(Debug, Clone, Serialize, Deserialize, Builder)]
 #[serde(rename_all = "lowercase")]
 pub struct SystemMessage {
-    #[builder(skip = Role::System)]
-    pub role: Role,
     #[builder(into)]
     pub content: String,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -32,8 +33,6 @@ impl From<String> for SystemMessage {
 
 #[derive(Debug, Clone, Serialize, Deserialize, Builder)]
 pub struct UserMessage {
-    #[builder(skip = Role::User)]
-    pub role: Role,
     #[builder(into)]
     pub content: String,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -48,8 +47,6 @@ impl From<String> for UserMessage {
 
 #[derive(Debug, Clone, Serialize, Deserialize, Builder)]
 pub struct AssistantMessage {
-    #[builder(skip = Role::Assistant)]
-    pub role: Role,
     #[serde(skip_serializing_if = "Option::is_none")]
     #[builder(into)]
     pub content: Option<String>,
@@ -57,11 +54,12 @@ pub struct AssistantMessage {
     pub name: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub tool_calls: Option<Vec<Value>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub refusal: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Builder)]
-pub struct ToolMessage{
-    pub role: Role,
+pub struct ToolMessage {
     #[builder(into)]
     pub content: String,
     pub tool_call_id: String,
@@ -143,5 +141,85 @@ impl IntoIterator for Messages {
     type IntoIter = std::vec::IntoIter<Self::Item>;
     fn into_iter(self) -> Self::IntoIter {
         self.0.into_iter()
+    }
+}
+#[cfg(test)]
+mod tests {
+    use serde_json::json;
+
+    use crate::chat::message::UserMessage;
+
+    use super::{AssistantMessage, Message, SystemMessage, ToolMessage};
+
+    #[test]
+    fn test_assistant_message_deserialization() {
+        let json = json!({
+            "content": "Hello John! How can I assist you today?",
+            "refusal": null,
+            "role": "assistant"
+        });
+
+        let msg: AssistantMessage = serde_json::from_value(json).unwrap();
+        assert_eq!(
+            msg.content.unwrap(),
+            "Hello John! How can I assist you today?"
+        );
+        assert!(msg.refusal.is_none());
+    }
+
+    #[test]
+    fn test_system_message_deserialization() {
+        let json = json!({
+            "content": "You are a helpful assistant",
+            "role": "system"
+        });
+
+        let msg: SystemMessage = serde_json::from_value(json).unwrap();
+        assert_eq!(msg.content, "You are a helpful assistant");
+    }
+
+    #[test]
+    fn test_user_message_deserialization() {
+        let json = json!({
+            "content": "What is the weather?",
+            "role": "user"
+        });
+
+        let msg: UserMessage = serde_json::from_value(json).unwrap();
+        assert_eq!(msg.content, "What is the weather?");
+    }
+
+    #[test]
+    fn test_tool_message_deserialization() {
+        let json = json!({
+            "content": "The temperature is 72F",
+            "role": "tool",
+            "tool_call_id": "weather_123"
+        });
+
+        let msg: ToolMessage = serde_json::from_value(json).unwrap();
+        assert_eq!(msg.content, "The temperature is 72F");
+        assert_eq!(msg.tool_call_id, "weather_123");
+    }
+
+    #[test]
+    fn test_message_deserialization() {
+        let json = json!({
+            "content": "Hello John! How can I assist you today?",
+            "refusal": null,
+            "role": "assistant"
+        });
+
+        let msg: Message = serde_json::from_value(json).unwrap();
+        match msg {
+            Message::Assistant(assistant_msg) => {
+                assert_eq!(
+                    assistant_msg.content.unwrap(),
+                    "Hello John! How can I assist you today?"
+                );
+                assert!(assistant_msg.refusal.is_none());
+            }
+            _ => panic!("Expected assistant message"),
+        }
     }
 }
