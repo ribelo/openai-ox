@@ -26,3 +26,4 @@ async-trait = "0.1"
 tokio = { version = "1.39", features = ["rt", "macros"] }
 futures = { version = "0.3", default-features = false, features = ["std"] }
 bon = "3.3.0"
+derive_more = {version = "1.0.0", features = ["display", "deref", "deref_mut", "into", "into_iterator"]}

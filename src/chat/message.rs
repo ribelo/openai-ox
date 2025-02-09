@@ -1,13 +1,14 @@
 use std::{
+    fmt,
     ops::{Deref, DerefMut},
     sync::Arc,
 };
 
 use bon::{builder, Builder};
-use serde::{Deserialize, Deserializer, Serialize};
+use serde::{de::DeserializeOwned, Deserialize, Deserializer, Serialize};
 use serde_json::Value;
 
-#[derive(Debug, Serialize, Deserialize, Clone)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum Role {
     System,
@@ -16,40 +17,138 @@ pub enum Role {
     Tool,
 }
 
+#[derive(Debug, Default, Serialize, Deserialize, Clone, PartialEq, Eq)]
+pub struct Text {
+    pub text: String,
+}
+
+impl Text {
+    #[must_use]
+    pub fn new(text: impl Into<String>) -> Self {
+        Self { text: text.into() }
+    }
+}
+
+impl<T: Into<String>> From<T> for Text {
+    fn from(text: T) -> Self {
+        Text { text: text.into() }
+    }
+}
+
+impl fmt::Display for Text {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        writeln!(f, "{}", self.text)
+    }
+}
+
+pub trait ChatMessage: Serialize + DeserializeOwned {
+    fn role(&self) -> Role;
+    fn content(&self) -> impl IntoIterator<Item = &MultimodalContent>;
+    fn content_mut(&mut self) -> impl IntoIterator<Item = &mut MultimodalContent>;
+    fn push_content(&mut self, content: impl Into<MultimodalContent>);
+    fn is_empty(&self) -> bool;
+    fn len(&self) -> usize;
+}
+
+#[derive(Debug, Serialize, Deserialize, derive_more::Display, Clone, PartialEq, Eq)]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum MultimodalContent {
+    Text(Text),
+    // Image(Image),
+    // ToolUse(ToolUse),
+    // ToolResult(ToolResult),
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, Builder)]
 #[serde(rename_all = "lowercase")]
 pub struct SystemMessage {
+    role: Role,
     #[builder(into)]
-    pub content: String,
+    content: Vec<MultimodalContent>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub name: Option<String>,
+    name: Option<String>,
 }
 
-impl From<String> for SystemMessage {
-    fn from(content: String) -> Self {
-        SystemMessage::builder().content(content).build()
+impl ChatMessage for SystemMessage {
+    fn role(&self) -> Role {
+        self.role
+    }
+
+    fn content(&self) -> impl IntoIterator<Item = &MultimodalContent> {
+        &self.content
+    }
+
+    fn content_mut(&mut self) -> impl IntoIterator<Item = &mut MultimodalContent> {
+        &mut self.content
+    }
+
+    fn push_content(&mut self, content: impl Into<MultimodalContent>) {
+        self.content.push(content.into());
+    }
+
+    fn is_empty(&self) -> bool {
+        self.content.is_empty()
+    }
+
+    fn len(&self) -> usize {
+        self.content.len()
     }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Builder)]
 pub struct UserMessage {
+    role: Role,
     #[builder(into)]
-    pub content: String,
+    content: Vec<MultimodalContent>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub name: Option<String>,
+    name: Option<String>,
 }
 
-impl From<String> for UserMessage {
-    fn from(content: String) -> Self {
-        UserMessage::builder().content(content).build()
+impl ChatMessage for UserMessage {
+    fn role(&self) -> Role {
+        self.role
+    }
+
+    fn content(&self) -> impl IntoIterator<Item = &MultimodalContent> {
+        &self.content
+    }
+
+    fn content_mut(&mut self) -> impl IntoIterator<Item = &mut MultimodalContent> {
+        &mut self.content
+    }
+
+    fn push_content(&mut self, content: impl Into<MultimodalContent>) {
+        self.content.push(content.into());
+    }
+
+    fn is_empty(&self) -> bool {
+        self.content.is_empty()
+    }
+
+    fn len(&self) -> usize {
+        self.content.len()
+    }
+}
+
+impl UserMessage {
+    pub fn new<T, U>(content: T) -> Self
+    where
+        T: IntoIterator<Item = U>,
+        U: Into<MultimodalContent>,
+    {
+        Self {
+            role: Role::User,
+            content: content.into_iter().map(Into::into).collect(),
+            name: None,
+        }
     }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Builder)]
 pub struct AssistantMessage {
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
     #[builder(into)]
-    pub content: Option<String>,
+    pub content: Vec<MultimodalContent>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub name: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -61,7 +160,7 @@ pub struct AssistantMessage {
 #[derive(Debug, Clone, Serialize, Deserialize, Builder)]
 pub struct ToolMessage {
     #[builder(into)]
-    pub content: String,
+    pub content: Vec<MultimodalContent>,
     pub tool_call_id: String,
 }
 
@@ -76,21 +175,65 @@ pub enum Message {
 }
 
 impl Message {
-    pub fn system(content: impl Into<String>) -> Self {
-        Message::System(SystemMessage::from(content.into()))
-    }
-    pub fn user(content: impl Into<String>) -> Self {
-        Message::User(UserMessage::from(content.into()))
-    }
-    pub fn assistant(content: impl Into<String>) -> Self {
-        Message::Assistant(AssistantMessage::builder().content(content.into()).build())
-    }
-    pub fn content(&self) -> Option<&str> {
+    #[must_use]
+    pub fn role(&self) -> Role {
         match self {
-            Message::System(msg) => Some(&msg.content),
-            Message::User(msg) => Some(&msg.content),
-            Message::Assistant(msg) => msg.content.as_deref(),
-            Message::Tool(msg) => Some(&msg.content),
+            Message::System(_) => Role::System,
+            Message::User(_) => Role::User,
+            Message::Assistant(_) => Role::Assistant,
+            Message::Tool(_) => Role::Tool,
+        }
+    }
+
+    pub fn content(&self) -> impl IntoIterator<Item = &MultimodalContent> {
+        match self {
+            Message::System(msg) => &msg.content,
+            Message::User(msg) => &msg.content,
+            Message::Assistant(msg) => &msg.content,
+            Message::Tool(msg) => &msg.content,
+        }
+    }
+
+    pub fn content_mut(&mut self) -> impl IntoIterator<Item = &mut MultimodalContent> {
+        match self {
+            Message::System(msg) => &mut msg.content,
+            Message::User(msg) => &mut msg.content,
+            Message::Assistant(msg) => &mut msg.content,
+            Message::Tool(msg) => &mut msg.content,
+        }
+    }
+
+    pub fn push_content(&mut self, content: impl Into<MultimodalContent>) {
+        match self {
+            Message::System(_) => {}
+            Message::User(msg) => msg.content = content.into(),
+            Message::Assistant(msg) => msg.content = Some(content.into()),
+            Message::Tool(_) => {}
+        }
+    }
+
+    #[must_use]
+    pub fn is_empty(&self) -> bool {
+        match self {
+            Message::System(_) => false,
+            Message::User(_) => false,
+            Message::Assistant(msg) => msg.content.is_none(),
+            Message::Tool(_) => false,
+        }
+    }
+
+    pub fn len(&self) -> usize {
+        match self {
+            Message::System(_) => 1,
+            Message::User(_) => 1,
+            Message::Assistant(msg) => {
+                if msg.content.is_some() {
+                    1
+                } else {
+                    0
+                }
+            }
+            Message::Tool(_) => 1,
         }
     }
 }
